@@ -11,6 +11,7 @@
 import argparse
 import sys
 import requests
+import warnings
 try:
     from HTMLParser import HTMLParser
 except ImportError:
@@ -41,6 +42,17 @@ command.add_argument('file', nargs="+", type=argparse.FileType("r"), \
     help='PanISa result files to merge')
 command.add_argument('-v', '--version', action='version', \
     version='%(prog)s 0.1.4')
+
+
+def soft_request(req_func, *args, **kwargs):    
+    try : 
+        return req_func(*args, **kwargs)
+    except requests.exceptions.SSLError:        
+        warnings.warn("SSL certificat of www-is.biotoul.fr cant't be verified and will be ignored.")
+        kwargs.update(verify=False)
+        with warnings.catch_warnings():        
+            warnings.filterwarnings("ignore")
+            return req_func(*args, **kwargs)
 
 
 class URLParser(HTMLParser):
@@ -100,18 +112,26 @@ def get_irl_irr(mergedPanISa, length):
 
 def search_ISfinder(potential_sequence):
     ##post data
-    r = requests.post('https://www-is.biotoul.fr/blast/ncbiIS.php', \
-                      data = {'title' : 'test', 'seq' : potential_sequence, 'seqfile' \
-                              : '', 'database' : 'ISfindernt', 'prog' : 'blastn', 'blast' \
-                              : 'ok', 'alignment' : '7', 'wordsize' : '11','expect' : '10.0' \
-                              , 'gapcost' : '5 2'},
-                     verify=False)
+    r = soft_request(requests.post,
+                     'https://www-is.biotoul.fr/blast/ncbiIS.php',
+                      data = {
+                          'title': 'test', 'seq' : potential_sequence,
+                          'seqfile': '',
+                          'database': 'ISfindernt',
+                          'prog': 'blastn',
+                          'blast': 'ok',
+                          'alignment' : '7',
+                          'wordsize' : '11',
+                          'expect' : '10.0',
+                          'gapcost' : '5 2',
+                      }
+                    )
     ##get url result
     parser = URLParser()
     parser.feed(r.text)
 
     ##downoad blast result
-    o = requests.get('https://www-is.biotoul.fr/blast/' + parser.urlres, verify=False)    
+    o = soft_request(requests.get, 'https://www-is.biotoul.fr/blast/' + parser.urlres)    
     parser = BlastParser()
     parser.feed(o.text)
     return parser.result
